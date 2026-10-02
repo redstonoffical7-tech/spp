@@ -1,0 +1,12 @@
+{
+  "name": "spp",
+  "version": "0.1.0",
+  "description": "A small PM2-like process manager",
+  "type": "module",
+  "bin": {
+    "spp": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
