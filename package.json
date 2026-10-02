@@ -1,12 +1,14 @@
 {
   "name": "spp",
   "version": "0.1.0",
-  "description": "A small PM2-like process manager",
+  "description": "SPP - a simple, kid-friendly PM2-style process manager",
   "type": "module",
   "bin": {
     "spp": "./src/cli.js"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "postinstall": "node src/cli.js --install-banner",
+    "start": "node src/cli.js"
   }
 }

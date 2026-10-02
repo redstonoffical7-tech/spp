@@ -25,6 +25,6 @@ test('ProcessManager starts and stops an app', async () => {
   assert.equal(manager.listApps().length, 1);
 
   const stopped = await manager.stopApp('demo');
-  assert.equal(stopped.status, 'stopped');
-  assert.equal(manager.getStatus('demo'), 'stopped');
+  assert.equal(stopped.status, 'offline');
+  assert.equal(manager.getStatus('demo'), 'offline');
 });

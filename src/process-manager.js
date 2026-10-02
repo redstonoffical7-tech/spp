@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
 export class ProcessManager {
@@ -12,6 +12,10 @@ export class ProcessManager {
     mkdirSync(this.stateDir, { recursive: true });
     mkdirSync(this.logDir, { recursive: true });
     this.loadState();
+  }
+
+  normalizeStatus(status = 'offline') {
+    return status === 'online' ? 'online' : 'offline';
   }
 
   isPidAlive(pid) {
@@ -41,7 +45,8 @@ export class ProcessManager {
         this.apps.set(app.id, {
           ...app,
           child: undefined,
-          status: isAlive ? 'online' : 'stopped',
+          status: isAlive ? 'online' : 'offline',
+          pid: isAlive ? app.pid : null,
         });
       }
     } catch {
@@ -50,7 +55,11 @@ export class ProcessManager {
   }
 
   persistState() {
-    const apps = Array.from(this.apps.values()).map(({ child, ...rest }) => rest);
+    const apps = Array.from(this.apps.values()).map(({ child, ...rest }) => ({
+      ...rest,
+      status: this.normalizeStatus(rest.status),
+      pid: rest.pid ?? null,
+    }));
     writeFileSync(this.stateFile, JSON.stringify({ apps }, null, 2));
   }
 
@@ -60,11 +69,15 @@ export class ProcessManager {
 
   getStatus(id) {
     const app = this.apps.get(id);
-    return app ? app.status : 'missing';
+    return app ? this.normalizeStatus(app.status) : 'offline';
   }
 
   listApps() {
-    return Array.from(this.apps.values()).map(({ child, ...rest }) => rest);
+    return Array.from(this.apps.values()).map(({ child, ...rest }) => ({
+      ...rest,
+      status: this.normalizeStatus(rest.status),
+      pid: rest.pid ?? null,
+    }));
   }
 
   async startApp({
@@ -77,11 +90,11 @@ export class ProcessManager {
     const appId = id ?? basename(script);
     const existing = this.apps.get(appId);
     if (existing && existing.status === 'online' && this.isPidAlive(existing.pid)) {
-      return { ...existing, pid: existing.pid, status: 'online' };
+      return { ...existing, status: 'online', pid: existing.pid };
     }
 
     if (existing && existing.pid && !this.isPidAlive(existing.pid)) {
-      existing.status = 'stopped';
+      existing.status = 'offline';
       existing.pid = null;
     }
 
@@ -107,11 +120,9 @@ export class ProcessManager {
 
     const onData = (streamName) => (chunk) => {
       appendFileSync(logFile, chunk);
-      if (this.apps.get(appId)?.status === 'online') {
-        const app = this.apps.get(appId);
-        if (app) {
-          app[`${streamName}Last`] = chunk.toString();
-        }
+      const app = this.apps.get(appId);
+      if (app) {
+        app[`${streamName}Last`] = chunk.toString();
       }
     };
 
@@ -127,7 +138,7 @@ export class ProcessManager {
         return;
       }
 
-      app.status = 'stopped';
+      app.status = 'offline';
       app.exitCode = code;
       app.signal = signal;
       app.pid = null;
@@ -143,11 +154,11 @@ export class ProcessManager {
   async stopApp(id) {
     const app = this.apps.get(id);
     if (!app) {
-      return { id, status: 'missing' };
+      return { id, status: 'offline', note: 'not found' };
     }
 
-    if (app.status === 'stopped' && !this.isPidAlive(app.pid)) {
-      return { ...app, status: 'stopped' };
+    if (app.status === 'offline' && !this.isPidAlive(app.pid)) {
+      return { ...app, status: 'offline' };
     }
 
     if (app.child) {
@@ -156,12 +167,14 @@ export class ProcessManager {
         const onExit = () => {
           const record = this.apps.get(id);
           if (record) {
-            record.status = 'stopped';
+            record.status = 'offline';
             record.pid = null;
             record.stoppedAt = new Date().toISOString();
             this.persistState();
+            resolve({ ...record, status: 'offline' });
+            return;
           }
-          resolve({ ...record, status: 'stopped' });
+          resolve({ id, status: 'offline' });
         };
 
         child.once('exit', onExit);
@@ -171,7 +184,7 @@ export class ProcessManager {
           if (child.exitCode === null) {
             child.kill('SIGKILL');
           }
-        }, 2000);
+        }, 1500);
       });
     }
 
@@ -181,20 +194,20 @@ export class ProcessManager {
         if (this.isPidAlive(app.pid)) {
           process.kill(app.pid, 'SIGKILL');
         }
-      }, 2000);
+      }, 1500);
     }
 
-    app.status = 'stopped';
+    app.status = 'offline';
     app.pid = null;
     app.stoppedAt = new Date().toISOString();
     this.persistState();
-    return { ...app, status: 'stopped' };
+    return { ...app, status: 'offline' };
   }
 
   async restartApp(id) {
     const app = this.apps.get(id);
     if (!app) {
-      return { id, status: 'missing' };
+      return { id, status: 'offline', note: 'not found' };
     }
 
     await this.stopApp(id);
