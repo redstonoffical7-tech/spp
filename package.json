@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "postinstall": "node src/cli.js --install-banner",
-    "start": "node src/cli.js"
+    "start": "node src/cli.js",
+    "install:vps": "bash ./install.sh"
   }
 }

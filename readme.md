@@ -28,12 +28,20 @@ Developed and built by  -  redstone
 
 ## Install
 
+For a VPS or Linux server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/redstonoffical7-tech/spp/main/install.sh | sudo bash
+```
+
+For local development:
+
 ```bash
 cd /workspaces/spp
 npm install
 ```
 
-When the package installs, the SPP banner will print automatically.
+After installation, run `spp help` to see the logo and commands.
 
 ## Commands
 
