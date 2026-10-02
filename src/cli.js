@@ -7,17 +7,28 @@ import { ProcessManager } from './process-manager.js';
 
 const manager = new ProcessManager({ stateDir: '.spp' });
 
-const LOGO = `░██████╗██████╗░██████╗░
-██╔════╝██╔══██╗██╔══██╗
-╚█████╗░██████╔╝██████╔╝
-░╚═══██╗██╔═══╝░██╔═══╝░
-██████╔╝██║░░░░░██║░░░░░
-╚═════╝░╚═╝░░░░░╚═╝░░░░░`;
+const ANSI = {
+  reset: '\u001b[0m',
+  bold: '\u001b[1m',
+  cyan: '\u001b[36m',
+  white: '\u001b[37m',
+};
+
+const LOGO = `
+  ███████╗██████╗ ███████╗
+  ██╔════╝██╔══██╗██╔════╝
+  ███████╗██████╔╝█████╗  
+  ╚════██╗██╔═══╝ ██╔══╝  
+  ███████║██║     ███████╗
+  ╚══════╝╚═╝     ╚══════╝
+`;
 
 const DEV = 'developed and built by  -  redstone';
 
 function printBanner() {
-  console.log(`\n${LOGO}\n${DEV}\n`);
+  const banner = `${ANSI.bold}${ANSI.cyan}${LOGO}${ANSI.reset}`;
+  const footer = `${ANSI.bold}${ANSI.white}${DEV}${ANSI.reset}`;
+  console.log(`\n${banner}\n${footer}\n`);
 }
 
 function printHelp() {
