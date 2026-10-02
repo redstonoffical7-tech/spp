@@ -12,22 +12,25 @@ const ANSI = {
   bold: '\u001b[1m',
   cyan: '\u001b[36m',
   white: '\u001b[37m',
+  red: '\u001b[91m',
 };
 
 const LOGO = `
-  ███████╗██████╗ ███████╗
-  ██╔════╝██╔══██╗██╔════╝
-  ███████╗██████╔╝█████╗  
-  ╚════██╗██╔═══╝ ██╔══╝  
-  ███████║██║     ███████╗
-  ╚══════╝╚═╝     ╚══════╝
+$$$$$$$\  $$$$$$$\  $$$$$$$\  
+$$  __$$\ $$  __$$\ $$  __$$\ 
+$$ /  \__|$$ |  $$ |$$ |  $$ |
+\$$$$$$\  $$$$$$$  |$$$$$$$  |
+ \____$$\ $$  ____/ $$  ____/ 
+$$\   $$ |$$ |      $$ |      
+\$$$$$$  |$$ |      $$ |      
+ \______/ \__|      \__|      
 `;
 
-const DEV = 'developed and built by  -  redstone';
+const DEV = 'developed and built by  -  ';
 
 function printBanner() {
   const banner = `${ANSI.bold}${ANSI.cyan}${LOGO}${ANSI.reset}`;
-  const footer = `${ANSI.bold}${ANSI.white}${DEV}${ANSI.reset}`;
+  const footer = `${ANSI.bold}${ANSI.white}${DEV}${ANSI.red}${ANSI.bold}redstone${ANSI.reset}`;
   console.log(`\n${banner}\n${footer}\n`);
 }
 
@@ -83,113 +86,56 @@ function parseEnvEntries(entries = []) {
   return env;
 }
 
-function toTable(rows) {
-  const columns = ['NAME', 'STATUS', 'PID', 'CMD'];
+function lxcStateFromStatus(value) {
+  const normalized = String(value ?? 'offline').toLowerCase();
+  return normalized === 'online' ? 'RUNNING' : 'STOPPED';
+}
+
+function lxcTable(rows) {
+  const columns = ['NAME', 'STATE', 'PID', 'COMMAND'];
   const values = rows.map((row) => ({
     name: String(row.name ?? 'unknown'),
-    status: String(row.status ?? 'offline'),
+    state: lxcStateFromStatus(row.state ?? row.status ?? 'offline'),
     pid: String(row.pid ?? '—'),
-    cmd: String(row.cmd ?? 'n/a'),
+    command: String(row.command ?? row.cmd ?? 'n/a'),
   }));
 
   const widths = columns.map((column, index) => {
-    const longest = values.reduce((max, row) => {
-      const text = Object.values(row)[index];
-      return Math.max(max, text.length);
-    }, column.length);
-    return longest;
+    const others = values.map((row) => String(Object.values(row)[index] ?? ''));
+    return Math.max(column.length, ...others.map((value) => value.length));
   });
 
-  const formatRow = (row) => {
-    const cells = [
-      row.name.padEnd(widths[0]),
-      row.status.padEnd(widths[1]),
-      row.pid.padEnd(widths[2]),
-      row.cmd,
-    ];
-    return `  ${cells.join('  ')}`;
-  };
+  const render = (cells) => `| ${cells.map((cell, index) => String(cell).padEnd(widths[index])).join(' | ')} |`;
+  const border = `+-${widths.map((width) => '-'.repeat(width + 2)).join('-+-')}-+`;
 
-  const header = formatRow({
-    name: columns[0].padEnd(widths[0]),
-    status: columns[1].padEnd(widths[1]),
-    pid: columns[2].padEnd(widths[2]),
-    cmd: columns[3],
-  });
+  const header = render(columns);
+  const lines = [border, header, border, ...values.map((row) => render([
+    row.name,
+    row.state,
+    row.pid,
+    row.command,
+  ])), border];
 
-  const divider = `  ${widths.map((width) => '-'.repeat(width + 2)).join(' ')}`;
-  const lines = [header, divider, ...values.map(formatRow)];
   return lines.join('\n');
-}
-
-function getDetectedNodeProcesses() {
-  try {
-    const output = execSync('ps -eo pid,comm,args --no-headers', { encoding: 'utf8' });
-    return output
-      .split(/\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const match = line.match(/^(\d+)\s+(\S+)\s+(.*)$/);
-        if (!match) {
-          return null;
-        }
-
-        const [, pid, command, args] = match;
-        const text = `${command} ${args}`.trim();
-        if (!text.includes('node') && !/node.*\.(js|mjs|cjs)/.test(text)) {
-          return null;
-        }
-
-        return {
-          pid: Number(pid),
-          name: command,
-          cmd: args || command,
-        };
-      })
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
 }
 
 async function showList() {
   const managed = manager.listApps();
-  const managedMap = new Map(managed.map((app) => [String(app.id), app]));
-  const seen = new Set();
-  const rows = [];
 
-  for (const app of managed) {
-    seen.add(String(app.pid ?? app.id));
-    rows.push({
-      name: app.id,
-      status: app.status || 'offline',
-      pid: app.pid ?? '—',
-      cmd: app.script || 'node',
-    });
-  }
-
-  for (const proc of getDetectedNodeProcesses()) {
-    const pidKey = String(proc.pid);
-    if (seen.has(pidKey)) {
-      continue;
-    }
-
-    rows.push({
-      name: proc.name,
-      status: 'online',
-      pid: proc.pid,
-      cmd: proc.cmd,
-    });
-  }
-
-  if (rows.length === 0) {
-    console.log('No Node.js processes found right now.');
+  if (managed.length === 0) {
+    console.log('No SPP apps yet.');
     return;
   }
 
+  const rows = managed.map((app) => ({
+    name: app.id,
+    status: app.status || 'offline',
+    pid: app.pid ?? '—',
+    command: app.script || 'node',
+  }));
+
   console.log('\nSPP process list\n');
-  console.log(toTable(rows));
+  console.log(lxcTable(rows));
 }
 
 async function main() {
@@ -239,7 +185,7 @@ async function main() {
     });
 
     console.log(`Started: ${app.id}`);
-    console.log(toTable([{ name: app.id, status: app.status, pid: app.pid ?? '—', cmd: app.script }]));
+    console.log(lxcTable([{ name: app.id, status: app.status, pid: app.pid ?? '—', command: app.script }]));
     return;
   }
 
@@ -252,7 +198,7 @@ async function main() {
 
     const app = await manager.stopApp(id);
     console.log(`Stopped: ${id}`);
-    console.log(toTable([{ name: app.id || id, status: app.status || 'offline', pid: app.pid ?? '—', cmd: app.script || 'process' }]));
+    console.log(lxcTable([{ name: app.id || id, status: app.status || 'offline', pid: app.pid ?? '—', command: app.script || 'process' }]));
     return;
   }
 
@@ -265,7 +211,7 @@ async function main() {
 
     const app = await manager.restartApp(id);
     console.log(`Restarted: ${app.id}`);
-    console.log(toTable([{ name: app.id, status: app.status, pid: app.pid ?? '—', cmd: app.script }]));
+    console.log(lxcTable([{ name: app.id, status: app.status, pid: app.pid ?? '—', command: app.script }]));
     return;
   }
 
